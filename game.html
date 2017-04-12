@@ -1,0 +1,698 @@
+<!doctype html> 
+<meta http-equiv="X-UA-Compatible" content="chrome=1, IE=11">
+<html lang="en"> 
+<head> 
+	<meta charset="UTF-8" />
+	<title>New clicker</title>
+	<script type="text/javascript" src="js/phaser.min.js"></script>
+	<script type="text/javascript" src="js/NinePatchGroup.js"></script>
+	<script type="text/javascript" src="js/Personage.js"></script>
+	<script type="text/javascript" src="js/LoadAssets.js"></script>
+	<script type="text/javascript" src="js/MainMenu.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+var game = new Phaser.Game(800, 600, Phaser.AUTO, '');
+
+game.raf = new Phaser.RequestAnimationFrame(game);
+game.antialias = false;
+game.raf.start();
+
+var LoadingText;
+
+var BootGameState = new Phaser.State();
+BootGameState.create = function() {
+	console.log('BOOT');
+    LoadingText = game.add.text(game.world.width / 2, game.world.height / 2, 'Loading...', {
+        fill: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 3,
+        align: 'center'
+    });
+    LoadingText.anchor.setTo(0.5, 0.5);
+    game.state.start('Preloader', false, false);
+};
+
+var GamePreloader = new Phaser.State();
+GamePreloader.preload = function() {
+    loadAssets(game);
+};
+
+GamePreloader.create = function() {
+    var tween = game.add.tween(LoadingText).to({
+        alpha: 0
+    }, 1000, Phaser.Easing.Linear.None, true);
+
+    tween.onComplete.add(function() {
+        game.state.start('MainMenu', false, false);
+    }, this);
+};
+
+var MainMenu = new Phaser.State();
+MainMenu.create = function() {
+	console.log('MAIN MENU');
+	createMenu(game);
+}
+
+var GameState = new Phaser.State();
+GameState.create = function() {
+	var backTexture;
+	switch (level) {
+		case 1:
+			currentMode = CAVE_MODE; break;
+		case 2:
+			currentMode = LIBRARY_MODE; break;
+		case 3:
+			currentMode = SWAMP_MODE; break;
+		default:
+			var mode = currentMode;
+			while (mode == currentMode || mode == 0) {
+				mode = Math.ceil(Math.random() * 3);
+			}
+			currentMode = mode;
+	}
+
+	switch (currentMode) {
+		case 1:
+			backTexture = 'backCave'; break;
+		case 2:
+			backTexture = 'backLibr'; break;
+		case 3:
+			backTexture = 'backSwamp'; break;
+	}
+	
+	var back = game.add.sprite(0, 0, backTexture);
+	back.scale.setTo(2.5,2);
+
+	var torpeda = game.add.sprite(0, 0, 'torpeda');
+
+	var leftStats = game.add.sprite(0, 0, 'leftStats');
+	leftStats.y = 600 - leftStats.height;
+
+	var rightStats = game.add.sprite(0, 0, 'rightStats');
+	rightStats.x = 800 - rightStats.width;
+	rightStats.y = 600 - rightStats.height;
+
+	var keysPanel = game.add.sprite(12, 9, 'keys');
+
+	menu = game.add.sprite(760, 12, 'menu');
+	menu.inputEnabled = true;
+	menu.events.onInputDown.add(onMenu, menu);
+	//game.input.onTap.add(onMenu, menu);
+
+	redBtn = game.add.sprite(608, 540, 'redButton');
+	redBtn.inputEnabled = true;
+	redBtn.events.onInputDown.add(onAddSTR, this);	
+	
+	blueBtn = game.add.sprite(608, 570, 'blueButton');
+	blueBtn.inputEnabled = true;
+	blueBtn.events.onInputDown.add(onAddDEF, this);
+
+	drawBars();
+	drawTexts();
+
+	createLight();
+
+	createGameBlocks();
+
+	initialized = true;
+}
+GameState.update = function() {
+	if (initialized) {
+		updateBars();
+		updateTexts();
+
+		if (skillPoints == 0) {
+			redBtn.visible = false;
+			blueBtn.visible = false;
+		} else {
+			redBtn.visible = true;
+			blueBtn.visible = true;
+		}
+	}
+
+	if (doneCount >= blocks.length) {
+		finishLevel();
+	}
+}
+
+var FinishLevelState = new Phaser.State();
+FinishLevelState.create = function() {
+	var back = game.add.sprite(0, -600, 'backMenu');
+
+	var text = game.add.text(back.width / 2, back.height / 2, 'Level ' + level + ' is completed', {
+        //font: '32px "Press Start 2P"',
+        fill: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 3,
+        align: 'center'
+    });
+    text.anchor.setTo(0.5, 0.5);
+    back.addChild(text);
+
+	var tween = game.add.tween(back).to({
+        y: 0
+    }, 1000, Phaser.Easing.Linear.None, true);
+
+    tween.onComplete.add(function() {
+        var timer = game.time.events.add(Phaser.Timer.SECOND * 2, function() {
+			game.time.events.remove(timer);
+
+			back.kill();
+
+			level += 1;
+			game.state.start('Game');
+		});
+    }, this);
+}
+
+
+game.state.add('Boot', BootGameState, false);
+game.state.add('Preloader', GamePreloader, false);
+game.state.add('MainMenu', MainMenu, false);
+game.state.add('Game', GameState, false);
+game.state.add('FinishLevel', FinishLevelState, false);
+
+//Главным шагом является старт загрузки Boot State'а
+game.state.start('Boot');
+
+var cave = {
+	1: {x:3, y:210, scaleX:1, scaleY:1, width:65, height:65, texture:'cave2', textureExtra:'cave2', lock:'', monster:'', maxHealth:30, resource:'goldLittle'},
+	2: {x:3, y:277, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:30, resource:'goldLittle'},
+	3: {x:48, y:142, scaleX:1, scaleY:1, width:160, height:65, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'kingSnake', maxHealth:560},
+	4: {x:69, y:210, scaleX:1, scaleY:1, width:95, height:130, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'ghost', maxHealth:400},
+	5: {x:40, y:345, scaleX:1, scaleY:1, width:125, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:130, resource:'goldBig'},
+	6: {x:151, y:40, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:60, resource:'goldMiddle'},
+	7: {x:253, y:75, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'goldenLock', monster:'', maxHealth:90, resource:'goldLittle'},
+	8: {x:210, y:142, scaleX:0.5, scaleY:0.5, width:65, height:65, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'beholder', maxHealth:64},
+	9: {x:277, y:142, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'blob', maxHealth:64},
+	10: {x:166, y:210, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'halfaGolem', maxHealth:275},
+	11: {x:166, y:312, scaleX:0.7, scaleY:0.7, width:100, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:80, resource:'goldMiddle'},
+	12: {x:166, y:379, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'goldenLock', monster:'', maxHealth:80, resource:'goldLittle'},
+	13: {x:268, y:210, scaleX:1, scaleY:1, width:65, height:130, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'giantWorm', maxHealth:95},
+	14: {x:334, y:210, scaleX:1, scaleY:1, width:65, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'angryRectangularJellyfish', maxHealth:80},
+	15: {x:268, y:342, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'halfaGolem', maxHealth:80}
+}
+
+var library = {
+	1: {x:3, y:210, scaleX:1, scaleY:1, width:65, height:65, texture:'cave2', textureExtra:'cave2', lock:'', monster:'', maxHealth:30, resource:'goldLittle'},
+	2: {x:3, y:277, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:30, resource:'goldLittle'},
+	3: {x:48, y:142, scaleX:1, scaleY:1, width:160, height:65, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'kingSnake', maxHealth:560},
+	4: {x:69, y:210, scaleX:1, scaleY:1, width:95, height:130, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'ghost', maxHealth:400},
+	5: {x:40, y:345, scaleX:1, scaleY:1, width:125, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:130, resource:'goldBig'},
+	6: {x:151, y:40, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:60, resource:'goldMiddle'},
+	7: {x:253, y:75, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'goldenLock', monster:'', maxHealth:90, resource:'goldLittle'},
+	8: {x:210, y:142, scaleX:0.5, scaleY:0.5, width:65, height:65, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'beholder', maxHealth:64},
+	9: {x:277, y:142, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'blob', maxHealth:64},
+	10: {x:166, y:210, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'halfaGolem', maxHealth:275},
+	11: {x:166, y:312, scaleX:0.7, scaleY:0.7, width:100, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:80, resource:'goldMiddle'},
+	12: {x:166, y:379, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'goldenLock', monster:'', maxHealth:80, resource:'goldLittle'},
+	13: {x:268, y:210, scaleX:1, scaleY:1, width:65, height:130, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'giantWorm', maxHealth:95},
+	14: {x:334, y:210, scaleX:1, scaleY:1, width:65, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'angryRectangularJellyfish', maxHealth:80},
+	15: {x:268, y:342, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'halfaGolem', maxHealth:80}
+}
+
+var swamp = {
+	1: {x:3, y:210, scaleX:1, scaleY:1, width:65, height:65, texture:'cave2', textureExtra:'cave2', lock:'', monster:'', maxHealth:30, resource:'goldLittle'},
+	2: {x:3, y:277, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:30, resource:'goldLittle'},
+	3: {x:48, y:142, scaleX:1, scaleY:1, width:160, height:65, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'kingSnake', maxHealth:560},
+	4: {x:69, y:210, scaleX:1, scaleY:1, width:95, height:130, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'ghost', maxHealth:400},
+	5: {x:40, y:345, scaleX:1, scaleY:1, width:125, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:130, resource:'goldBig'},
+	6: {x:151, y:40, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:60, resource:'goldMiddle'},
+	7: {x:253, y:75, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'goldenLock', monster:'', maxHealth:90, resource:'goldLittle'},
+	8: {x:210, y:142, scaleX:0.5, scaleY:0.5, width:65, height:65, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'beholder', maxHealth:64},
+	9: {x:277, y:142, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'blob', maxHealth:64},
+	10: {x:166, y:210, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave1', lock:'silverLock', monster:'halfaGolem', maxHealth:275},
+	11: {x:166, y:312, scaleX:0.7, scaleY:0.7, width:100, height:65, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'', maxHealth:80, resource:'goldMiddle'},
+	12: {x:166, y:379, scaleX:1, scaleY:1, width:65, height:65, texture:'cave3', textureExtra:'cave2', lock:'goldenLock', monster:'', maxHealth:80, resource:'goldLittle'},
+	13: {x:268, y:210, scaleX:1, scaleY:1, width:65, height:130, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'giantWorm', maxHealth:95},
+	14: {x:334, y:210, scaleX:1, scaleY:1, width:65, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'angryRectangularJellyfish', maxHealth:80},
+	15: {x:268, y:342, scaleX:1, scaleY:1, width:100, height:100, texture:'cave3', textureExtra:'cave2', lock:'silverLock', monster:'halfaGolem', maxHealth:80}
+}
+
+var currentMode;
+var CAVE_MODE = 1;
+var LIBRARY_MODE = 2;
+var SWAMP_MODE = 3;
+
+var gold = 1000;
+var level = 1;
+var skillPoints = 100;
+
+var silverKey = 120;
+var goldKey = 120;
+
+var hp = 300;
+var maxHP = 300;
+var nrg = 30;
+var maxNRG = 50;
+var str = 20;
+var def = 50;
+
+var goldText;
+var levelText;
+var skillPointsText;
+var silverKeyText;
+var goldKeyText;
+var hpText;
+var nrgText;
+var strText;
+var defText;
+
+var strBar;
+var strGraphic;
+var defBar;
+var defGraphic;
+var hpBar;
+var hpGraphic;
+var nrgBar;
+var nrgGraphic;
+
+var menu;
+var redBtn;
+var blueBtn;
+
+var blocks = [];
+var doneCount;
+
+var network = [];
+var CELL_WIDTH = 50;
+var CELL_HEIGHT = 50;
+
+var initialized = false;
+
+function drawBars() {
+	hpBar = game.add.sprite(42, 554, null);
+	hpGraphic = game.add.graphics();
+	hpBar.addChild(hpGraphic);
+
+	nrgBar = game.add.sprite(42, 584, null);
+	nrgGraphic = game.add.graphics();
+	nrgBar.addChild(nrgGraphic);
+
+	strBar = game.add.sprite(641, 554, null);
+	strGraphic = game.add.graphics();
+	strBar.addChild(strGraphic);
+
+	defBar = game.add.sprite(641, 584, null);
+	defGraphic = game.add.graphics();
+	defBar.addChild(defGraphic);
+}
+
+function drawTexts() {
+	goldText = game.add.text(0, 13, '0 G', { font:'14px Verdana', fill: '#f7941d' });
+
+	silverKeyText = game.add.text(68, 18, '0', { font:'13px Verdana', fill: '#f7941d' });
+	goldKeyText = game.add.text(140, 18, '0', { font:'13px Verdana', fill: '#f7941d' });
+
+	levelText = game.add.text(7, 519, 'Level 1', { font:'14px Verdana', fill: '#000' });
+	skillPointsText = game.add.text(700, 520, 'Skill points: 0', { font:'12px Verdana', fill: '#000' });
+	hpText = game.add.text(50, 546, '0 / 100', { font:'12px Verdana', fill: '#000' });
+	nrgText = game.add.text(50, 575, '0 / 50', { font:'14px Verdana', fill: '#000' });
+	strText = game.add.text(650, 545, '0', { font:'14px Verdana', fill: '#000' });
+	defText = game.add.text(650, 575, '0', { font:'14px Verdana', fill: '#000' });
+}
+
+function createLight() {
+	//if (currentMode == CAVE_MODE) {
+		var l1 = game.add.sprite(0, 0, 'light');
+		l1.alpha = 0.3;
+		var l2 = game.add.sprite(-60, 60, 'light');
+		l2.alpha = 0.3;
+		var l3 = game.add.sprite(150, 310, 'light');
+		l3.alpha = 0.3;
+		var l4 = game.add.sprite(260, 90, 'light');
+		l4.alpha = 0.3;
+		var l5 = game.add.sprite(250, 230, 'light');
+		l5.alpha = 0.3;
+
+		game.add.sprite(15, 150, 'lampBig');
+		game.add.sprite(110, 70, 'lampBig');
+		game.add.sprite(243, 385, 'lampBig');
+		game.add.sprite(362, 168, 'lampLittle');
+		game.add.sprite(350, 310, 'lampLittle');
+
+		var l1 = game.add.sprite(400, 0, 'light');
+		l1.alpha = 0.3;
+		var l2 = game.add.sprite(340, 60, 'light');
+		l2.alpha = 0.3;
+		var l3 = game.add.sprite(550, 310, 'light');
+		l3.alpha = 0.3;
+		var l4 = game.add.sprite(660, 90, 'light');
+		l4.alpha = 0.3;
+		var l5 = game.add.sprite(650, 230, 'light');
+		l5.alpha = 0.3;
+
+		game.add.sprite(415, 150, 'lampBig');
+		game.add.sprite(510, 70, 'lampBig');
+		game.add.sprite(641, 385, 'lampBig');
+		game.add.sprite(762, 168, 'lampLittle');
+		game.add.sprite(750, 310, 'lampLittle');
+	//}
+}
+
+function createGameBlocks() {
+	if (blocks.length != 0) {
+		for (i = 0; i < blocks.length; i++) {
+			blocks[i].createBlock();
+		}
+	} else {
+		blocks = [];
+		doneCount = 0;
+
+		var n = 4, m = 4;
+		for (var i = 0; i < m; i++){
+		    network[i] = [];
+		    for (var j = 0; j < n; j++){
+		        network[i][j] = 0;
+		}}
+
+
+		for (bl in cave) {
+			var block = new Block(cave[bl], bl);
+			block.createBlock();
+
+			blocks[blocks.length] = block;
+		}
+	}
+
+	var pers = new Personage(game, 1, 245, game.height - 104);
+	var pers2 = new Personage(game, 2, 325, game.height - 104);
+	var pers3 = new Personage(game, 3, 405, game.height - 104);
+	var pers4 = new Personage(game, 4, 485, game.height - 104);
+}
+
+function onMenu() {
+	game.state.start('MainMenu', false, false);
+}
+
+function onAddSTR() {
+	if (skillPoints == 0) return;
+
+	skillPoints -= 1;
+	str += 1;
+}
+
+function onAddDEF() {
+	if (skillPoints == 0) return;
+
+	skillPoints -= 1;
+	def += 1;
+}
+
+function updateBars() {
+	if (hp * 1.84 <= 184) {
+		hpGraphic.clear();
+		hpGraphic.lineStyle(20, 0x8dc73f, 1);
+		hpGraphic.moveTo(0,0);
+		hpGraphic.lineTo(hp * 1.84,0);
+	}
+
+	if (nrg * 1.83 * 2 <= 183) {
+		nrgGraphic.clear();
+		nrgGraphic.lineStyle(20, 0xf8941d, 1);
+		nrgGraphic.moveTo(0,0);
+		nrgGraphic.lineTo(nrg * 1.83 * 2,0);
+	}
+
+	if (str * 1.55 <= 155) {
+		strGraphic.clear();
+		strGraphic.lineStyle(20, 0xd54435, 1);
+		strGraphic.moveTo(0,0);
+		strGraphic.lineTo(str * 1.55,0);
+	}
+
+	if (def * 1.55 <= 155) {
+		defGraphic.clear();
+		defGraphic.lineStyle(20, 0x149df6, 1);
+		defGraphic.moveTo(0,0);
+		defGraphic.lineTo(def * 1.55,0);
+	}
+}
+
+function updateTexts() {
+	goldText.text = gold + ' G';
+	goldText.x = (800 - goldText.width) / 2;
+
+	silverKeyText.text = silverKey;
+	goldKeyText.text = goldKey;
+
+	levelText.text = 'Level ' + level;
+	skillPointsText.text = 'Skill points: ' + skillPoints;
+	hpText.text = hp + ' / ' + maxHP;
+	nrgText.text = nrg + ' / ' + maxNRG;
+	strText.text = str;
+	defText.text = def;
+}
+
+function DropItem(object, count) {
+	var self = this;
+	this.count = count;
+	this.obj = game.add.text(0, 13, '+' + count, { font:'14px Verdana', fill: '#f7941d'});
+
+	this.onTakeBonus = function() {
+		gold += self.count;
+		this.destroy();
+	}
+
+	this.sprite = game.add.group();
+	var boundstexture = game.add.bitmapData(this.obj.width, this.obj.height);
+	this.bounds = this.sprite.create(this.obj.x, this.obj.y, boundstexture);
+	this.sprite.x = game.input.x;
+	this.sprite.y = game.input.y;
+	this.sprite.addChild(this.obj);
+	this.bounds.inputEnabled = true;
+	this.bounds.events.onInputOver.add(this.onTakeBonus, this.obj);
+
+	this.move = function() {
+		var dx = Math.floor(Math.random() * (100 - 50) + 50);
+		if (dx % 2 == 0) {
+			dx = -dx;
+		}
+		var controlX = this.sprite.x + dx;
+		var dy = Math.floor(Math.random() * (100 - 50) + 50);
+		if (dy % 2 == 0) {
+			dy = -dy;
+		}
+		var controlY = this.sprite.y + dy;
+		var time = 5000; 
+		var tween = game.add.tween(this.sprite).to({x:controlX, y:controlY}, time, Phaser.Easing.Quadratic.Out, true);
+		tween.onComplete.add(this.deleteObject, this.obj);
+	}
+
+	this.deleteObject = function() {
+		var self = this;
+		var timer = game.time.events.add(Phaser.Timer.SECOND * 3, function() {
+			game.time.events.remove(timer);
+
+			self.destroy();
+		});
+	}
+}
+
+function Block(object, id) {
+	this.id = id;
+
+	this.x = object.x;
+	this.y = object.y;
+	this.width = object.width;
+	this.height = object.height;
+	this.scaleX = object.scaleX;
+	this.scaleY = object.scaleY;
+	this.texture = object.texture;
+	this.textureExtra = object.textureExtra;
+	this.lock = object.lock;
+	this.monster = object.monster;
+	this.maxHealth = object.maxHealth;
+
+	this.resource = '';
+	if (object.resource) this.resource = object.resource;
+
+	this.currentStrike = 0;
+
+	this.isDone = false;
+
+	this.block;
+	this.back;
+	this.backWidth;
+	this.healthText;
+	this.bar;
+	this.barGraphic;
+
+	this.createBlock = function(texture) {
+		if (texture) {
+			this.texture = texture;
+		}
+
+		this.back = new NinePatchGroup(game, this.x, this.y, this.width, this.height, this.texture);
+		this.back.update();
+
+		this.block = game.add.group();
+		this.block.name = this.id;
+		this.lockSprite;
+		this.ms;
+		this.res;
+
+		if (this.lock != '') {
+			this.lockSprite = this.block.create(this.x, this.y, this.lock);
+			this.lockSprite.x = this.x + (this.width - this.lockSprite.width) / 2;
+			this.lockSprite.y = this.y + (this.height - this.lockSprite.height) / 2;
+		} else {
+			if (this.monster != '') {
+				this.mns = this.block.create(this.x, this.y, this.monster);
+				this.mns.scale.setTo(this.scaleX, this.scaleY);
+				this.mns.x = this.x + (this.width - this.mns.width) / 2;
+				this.mns.y = this.y + this.height - this.mns.height - 18;
+
+				this.mns.animations.add('anim', [1, 2, 3, 4, 3, 2], 8, false);
+				this.mns.frame = 0;
+			}
+
+			if (this.resource != '') {
+				this.res = this.block.create(this.x, this.y, this.resource);
+				this.res.scale.setTo(this.scaleX, this.scaleY);
+				this.res.x = this.x + (this.width - this.res.width) / 2;
+				this.res.y = this.y + this.height - this.res.height - 18;
+
+				this.res.animations.add('anim', [1, 2, 3, 4, 3, 2], 8, false);
+			}
+
+			this.drawHealth();
+		}
+
+		var boundstexture = game.add.bitmapData(this.width, this.height);
+		this.bounds = this.block.create(this.x, this.y, boundstexture);
+		this.bounds.inputEnabled = true;
+		this.bounds.events.onInputDown.add(onMonsterClick, this);
+	}
+
+	this.drawHealth = function() {
+		this.bar = game.add.sprite(this.x + 4.2, this.y + this.height - 10, null);
+		this.barGraphic = game.add.graphics();
+		this.bar.addChild(this.barGraphic);
+
+		this.healthText = game.add.text(this.x + 10, this.y + this.height - 16, this.currentStrike + ' / ' + this.maxHealth, 
+			{ font:'11px Verdana', fill: '#000000' });
+
+		this.update();
+	}
+
+	this.update = function() {
+		if (this.healthText) {
+			this.healthText.text = this.currentStrike + ' / ' + this.maxHealth;
+
+			var w1 = this.width - 8.4;
+			var procent = (100 * this.currentStrike) / this.maxHealth;
+			var distance = (w1 * procent) / 100;
+			if (distance > w1) distance = w1;
+
+			this.barGraphic.clear();
+			this.barGraphic.lineStyle(11, 0x8dc73f, 1);
+			this.barGraphic.moveTo(0,0);
+			this.barGraphic.lineTo(distance,0);
+		}
+
+		if (this.currentStrike >= this.maxHealth && !this.isDone) {
+			this.isDone = true;
+			doneCount += 1;
+		}
+	}
+
+	this.openBlock = function(){
+		if (this.lockSprite) this.lockSprite.kill();
+		if (this.back) this.back.kill();
+		this.lock = '';
+		this.createBlock(this.textureExtra);
+	}
+
+	this.anim = null;
+	this.playAnimation = function(){
+		if (this.anim != null) {
+			game.time.events.remove(this.anim);
+			this.anim = null;
+		}
+
+		that = this;
+		if (this.mns) {
+			this.mns.animations.play('anim', 8, true);
+		} else if (this.res) {
+			this.res.animations.play('anim', 8, true);
+		}
+
+		this.anim = game.time.events.add(Phaser.Timer.SECOND * 1, function() {
+			game.time.events.remove(this.anim);
+
+			if (that.mns) {
+				console.log('stop2');
+				that.mns.animations.stop('anim');
+				that.mns.frame = 0;
+			} else if (that.res) {
+				that.res.animations.stop('anim');
+				that.res.frame = 0;
+			}
+		});
+	}
+}
+
+function onMonsterClick() {
+	if (this.lock != '') {
+		switch (this.lock){
+			case 'silverLock':
+				if (silverKey > 0) {
+					silverKey -= 1;
+					this.openBlock();
+				}
+				break;
+			case 'goldenLock':
+				if (goldKey > 0) {
+					goldKey -= 1;
+					this.openBlock();
+				}
+				break;
+		}
+	} else {
+		this.playAnimation();
+		this.currentStrike += 10;
+		showBonuses(this);
+	}
+
+	this.update();
+}
+
+function showBonuses(object) {
+	var num = Math.ceil(Math.random() * 10);
+	console.log(num);
+	if (num % 2 == 0) {
+		//var sprite = game.add.sprite(object.x, object.y);
+		//var text = game.add.text(0, 13, '+10', { font:'14px Verdana', fill: '#f7941d' });
+		//text.x = game.input.x;
+		//text.y = game.input.y;
+
+		//var Xf = text.x + (Math.random() * object.width) - object.width/2;
+		//var Yf = text.y + (Math.random() * object.height);
+		var bitem = new DropItem(object, 10);
+		bitem.move();
+	}
+	//game.add.tween(text).to({y: 420}, 1000, Phaser.Easing.Bounce.Out, true, 1000 + 400 * 1, false);
+	//var tween = game.add.tween(text).to({angle: 360}, 1000, Phaser.Easing.Cubic.In, true, 1000 + 400 * 1, false);
+
+	//tween.onComplete.add(deleteText, text);
+}
+
+function finishLevel() {
+	blocks = [];
+	doneCount = 0;
+	game.state.start('FinishLevel', false, false);
+}
+
+</script>
+
+</body>
+</html>
